@@ -125,8 +125,8 @@ class PagePreprocessingModel(BasePageModel):
             penalty += 0.1 * len(frag_matches)
 
         # Additional heuristic: if the average token length is below 2, add a penalty.
-        tokens = text.split()
-        if tokens and (sum(map(len, tokens)) / len(tokens)) < 2:
-            penalty += 0.2
+        # tokens = text.split()
+        # if tokens and (sum(map(len, tokens)) / len(tokens)) < 2:
+        #    penalty += 0.2
 
         return max(1.0 - penalty, 0.0)
