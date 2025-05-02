@@ -948,32 +948,36 @@ files = [
 
 [[package]]
 name = "docling-core"
-version = "2.28.0"
+version = "2.28.1"
 description = "A python library to define and validate data types in Docling."
 optional = false
-python-versions = "<4.0,>=3.9"
-files = [
-    {file = "docling_core-2.28.0-py3-none-any.whl", hash = "sha256:f1a01446996b90c4c151ec0ad247283888e6372f9dac0e356d06f8b9838ca4ca"},
-    {file = "docling_core-2.28.0.tar.gz", hash = "sha256:16a762c251063839d7b20624cd6f89c2488872377f8546b037e604606014fb66"},
-]
+python-versions = "^3.9"
+files = []
+develop = false
 
 [package.dependencies]
-jsonref = ">=1.1.0,<2.0.0"
-jsonschema = ">=4.16.0,<5.0.0"
-latex2mathml = ">=3.77.0,<4.0.0"
-pandas = ">=2.1.4,<3.0.0"
+jsonref = "^1.1.0"
+jsonschema = "^4.16.0"
+latex2mathml = "^3.77.0"
+pandas = "^2.1.4"
 pillow = ">=10.0.0,<12.0.0"
-pydantic = ">=2.6.0,<2.10.0 || >2.10.0,<2.10.1 || >2.10.1,<2.10.2 || >2.10.2,<3.0.0"
+pydantic = ">=2.6.0,<3.0.0,!=2.10.0,!=2.10.1,!=2.10.2"
 pyyaml = ">=5.1,<7.0.0"
-semchunk = {version = ">=2.2.0,<3.0.0", optional = true, markers = "extra == \"chunking\" or extra == \"chunking-openai\""}
-tabulate = ">=0.9.0,<0.10.0"
-transformers = {version = ">=4.34.0,<5.0.0", optional = true, markers = "extra == \"chunking\""}
+semchunk = {version = "^2.2.0", optional = true}
+tabulate = "^0.9.0"
+transformers = {version = "^4.34.0", optional = true}
 typer = ">=0.12.5,<0.16.0"
-typing-extensions = ">=4.12.2,<5.0.0"
+typing-extensions = "^4.12.2"
 
 [package.extras]
 chunking = ["semchunk (>=2.2.0,<3.0.0)", "transformers (>=4.34.0,<5.0.0)"]
 chunking-openai = ["semchunk (>=2.2.0,<3.0.0)", "tiktoken (>=0.9.0,<0.10.0)"]
+
+[package.source]
+type = "git"
+url = "https://github.com/docling-project/docling-core.git"
+reference = "8d79a0990cecbafe17802ae31878c539a150773e"
+resolved_reference = "8d79a0990cecbafe17802ae31878c539a150773e"
 
 [[package]]
 name = "docling-ibm-models"
@@ -8002,4 +8006,4 @@ vlm = ["accelerate", "transformers", "transformers"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "9571b777eaeff16151ca2a54f6ebb0b986bb0cc112701199eb8eb98211523b08"
+content-hash = "06c05e0b47eed4e38dc8e2bbd8bf44a7e3b47519e3d32aca9022ece7922a076b"
