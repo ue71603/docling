@@ -315,29 +315,82 @@ class QualityGrade(str, Enum):
 
 
 class PageConfidenceScores(BaseModel):
-    overall_score: ScoreValue = np.nan
-
     parse_score: ScoreValue = np.nan
     layout_score: ScoreValue = np.nan
     table_score: ScoreValue = np.nan
     ocr_score: ScoreValue = np.nan
 
-    @computed_field  # type: ignore
-    @property
-    def grade(self) -> QualityGrade:
-        if self.overall_score < 0.5:
+    def _score_to_grade(self, score: ScoreValue) -> QualityGrade:
+        if score < 0.5:
             return QualityGrade.POOR
-        elif self.overall_score < 0.8:
+        elif score < 0.8:
             return QualityGrade.FAIR
-        elif self.overall_score < 0.9:
+        elif score < 0.9:
             return QualityGrade.GOOD
-        elif self.overall_score >= 0.9:
+        elif score >= 0.9:
             return QualityGrade.EXCELLENT
 
         return QualityGrade.UNSPECIFIED
+
+    @computed_field  # type: ignore
+    @property
+    def mean_grade(self) -> QualityGrade:
+        return self._score_to_grade(self.mean_score)
+
+    @computed_field  # type: ignore
+    @property
+    def low_grade(self) -> QualityGrade:
+        return self._score_to_grade(self.low_score)
+
+    @computed_field  # type: ignore
+    @property
+    def mean_score(self) -> ScoreValue:
+        return ScoreValue(
+            np.nanmean(
+                [
+                    self.ocr_score,
+                    self.table_score,
+                    self.layout_score,
+                    self.parse_score,
+                ]
+            )
+        )
+
+    @computed_field  # type: ignore
+    @property
+    def low_score(self) -> ScoreValue:
+        return ScoreValue(
+            np.nanquantile(
+                [
+                    self.ocr_score,
+                    self.table_score,
+                    self.layout_score,
+                    self.parse_score,
+                ],
+                q=0.05,
+            )
+        )
 
 
 class ConfidenceReport(PageConfidenceScores):
     pages: Dict[int, PageConfidenceScores] = Field(
         default_factory=lambda: defaultdict(PageConfidenceScores)
     )
+
+    @computed_field  # type: ignore
+    @property
+    def mean_score(self) -> ScoreValue:
+        return ScoreValue(
+            np.nanmean(
+                [c.mean_score for c in self.pages.values()],
+            )
+        )
+
+    @computed_field  # type: ignore
+    @property
+    def low_score(self) -> ScoreValue:
+        return ScoreValue(
+            np.nanmean(
+                [c.low_score for c in self.pages.values()],
+            )
+        )

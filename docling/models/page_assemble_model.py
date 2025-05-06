@@ -153,17 +153,4 @@ class PageAssembleModel(BasePageModel):
                         elements=elements, headers=headers, body=body
                     )
 
-                    # Aggregate page score
-                    scores = conv_res.confidence.pages[page.page_no]
-                    scores.overall_score = float(
-                        np.nanmean(
-                            [
-                                scores.ocr_score,
-                                scores.table_score,
-                                scores.layout_score,
-                                scores.parse_score,
-                            ]
-                        )
-                    )
-
                 yield page

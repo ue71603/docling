@@ -269,13 +269,6 @@ class StandardPdfPipeline(PaginatedPipeline):
                     )
                 )
 
-                conv_res.confidence.overall_score = float(
-                    np.nanquantile(
-                        [c.overall_score for c in conv_res.confidence.pages.values()],
-                        q=0.05,  # overall score should relate to worst 5% of page scores.
-                    )
-                )
-
         return conv_res
 
     @classmethod
