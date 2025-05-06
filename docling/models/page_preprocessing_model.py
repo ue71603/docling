@@ -28,8 +28,8 @@ class PagePreprocessingModel(BasePageModel):
         self.SLASH_G_RE = re.compile(r"(?:/G\d+){2,}")
         self.FRAG_RE = re.compile(r"\b[A-Za-z](?:/[a-z]{1,3}\.[a-z]{1,3}){2,}\b")
         self.SLASH_NUMBER_GARBAGE_RE = re.compile(
-            r"(?:/\w+\s+){5,}"
-        )  # Five or more "/token " sequences
+            r"(?:/\w+\s*){2,}"
+        )  # Two or more "/token " sequences
 
     def __call__(
         self, conv_res: ConversionResult, page_batch: Iterable[Page]
