@@ -306,6 +306,14 @@ class OpenAiApiResponse(BaseModel):
 ScoreValue = float
 
 
+class QualityGrade(str, Enum):
+    POOR = "poor"
+    FAIR = "fair"
+    GOOD = "good"
+    EXCELLENT = "excellent"
+    UNSPECIFIED = "unspecified"
+
+
 class PageConfidenceScores(BaseModel):
     overall_score: ScoreValue = np.nan
 
@@ -314,16 +322,6 @@ class PageConfidenceScores(BaseModel):
     table_score: ScoreValue = np.nan
     ocr_score: ScoreValue = np.nan
 
-
-class QualityGrade(str, Enum):
-    POOR = "poor"
-    FAIR = "fair"
-    GOOD = "good"
-    VERY_GOOD = "very_good"
-    UNSPECIFIED = "unspecified"
-
-
-class ConfidenceReport(PageConfidenceScores):
     @computed_field  # type: ignore
     @property
     def grade(self) -> QualityGrade:
@@ -334,10 +332,12 @@ class ConfidenceReport(PageConfidenceScores):
         elif self.overall_score < 0.9:
             return QualityGrade.GOOD
         elif self.overall_score >= 0.9:
-            return QualityGrade.VERY_GOOD
+            return QualityGrade.EXCELLENT
 
         return QualityGrade.UNSPECIFIED
 
+
+class ConfidenceReport(PageConfidenceScores):
     pages: Dict[int, PageConfidenceScores] = Field(
         default_factory=lambda: defaultdict(PageConfidenceScores)
     )
