@@ -1,5 +1,4 @@
 import logging
-import warnings
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional, Union, cast
@@ -15,11 +14,14 @@ from docling.backend.pdf_backend import PdfDocumentBackend
 from docling.datamodel.base_models import InputFormat, Page
 from docling.datamodel.document import ConversionResult, InputDocument
 from docling.datamodel.pipeline_options import (
+    ApiVlmOptions,
+    HuggingFaceVlmOptions,
     InferenceFramework,
     ResponseFormat,
     VlmPipelineOptions,
 )
 from docling.datamodel.settings import settings
+from docling.models.api_vlm_model import ApiVlmModel
 from docling.models.hf_mlx_model import HuggingFaceMlxModel
 from docling.models.hf_vlm_model import HuggingFaceVlmModel
 from docling.pipeline.base_pipeline import PaginatedPipeline
@@ -29,7 +31,6 @@ _log = logging.getLogger(__name__)
 
 
 class VlmPipeline(PaginatedPipeline):
-
     def __init__(self, pipeline_options: VlmPipelineOptions):
         super().__init__(pipeline_options)
         self.keep_backend = True
@@ -57,27 +58,34 @@ class VlmPipeline(PaginatedPipeline):
 
         self.keep_images = self.pipeline_options.generate_page_images
 
-        if (
-            self.pipeline_options.vlm_options.inference_framework
-            == InferenceFramework.MLX
-        ):
+        if isinstance(pipeline_options.vlm_options, ApiVlmOptions):
             self.build_pipe = [
-                HuggingFaceMlxModel(
+                ApiVlmModel(
                     enabled=True,  # must be always enabled for this pipeline to make sense.
-                    artifacts_path=artifacts_path,
-                    accelerator_options=pipeline_options.accelerator_options,
-                    vlm_options=self.pipeline_options.vlm_options,
+                    enable_remote_services=self.pipeline_options.enable_remote_services,
+                    vlm_options=cast(ApiVlmOptions, self.pipeline_options.vlm_options),
                 ),
             ]
-        else:
-            self.build_pipe = [
-                HuggingFaceVlmModel(
-                    enabled=True,  # must be always enabled for this pipeline to make sense.
-                    artifacts_path=artifacts_path,
-                    accelerator_options=pipeline_options.accelerator_options,
-                    vlm_options=self.pipeline_options.vlm_options,
-                ),
-            ]
+        elif isinstance(self.pipeline_options.vlm_options, HuggingFaceVlmOptions):
+            vlm_options = cast(HuggingFaceVlmOptions, self.pipeline_options.vlm_options)
+            if vlm_options.inference_framework == InferenceFramework.MLX:
+                self.build_pipe = [
+                    HuggingFaceMlxModel(
+                        enabled=True,  # must be always enabled for this pipeline to make sense.
+                        artifacts_path=artifacts_path,
+                        accelerator_options=pipeline_options.accelerator_options,
+                        vlm_options=vlm_options,
+                    ),
+                ]
+            else:
+                self.build_pipe = [
+                    HuggingFaceVlmModel(
+                        enabled=True,  # must be always enabled for this pipeline to make sense.
+                        artifacts_path=artifacts_path,
+                        accelerator_options=pipeline_options.accelerator_options,
+                        vlm_options=vlm_options,
+                    ),
+                ]
 
         self.enrichment_pipe = [
             # Other models working on `NodeItem` elements in the DoclingDocument
@@ -104,7 +112,6 @@ class VlmPipeline(PaginatedPipeline):
 
     def _assemble_document(self, conv_res: ConversionResult) -> ConversionResult:
         with TimeRecorder(conv_res, "doc_assemble", scope=ProfilingScope.DOCUMENT):
-
             if (
                 self.pipeline_options.vlm_options.response_format
                 == ResponseFormat.DOCTAGS

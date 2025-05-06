@@ -26,6 +26,8 @@ _log = logging.getLogger(__name__)
 
 # tags that generate NodeItem elements
 TAGS_FOR_NODE_ITEMS: Final = [
+    "address",
+    "details",
     "h1",
     "h2",
     "h3",
@@ -34,9 +36,11 @@ TAGS_FOR_NODE_ITEMS: Final = [
     "h6",
     "p",
     "pre",
+    "code",
     "ul",
     "ol",
     "li",
+    "summary",
     "table",
     "figure",
     "img",
@@ -54,7 +58,7 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
         self.max_levels = 10
         self.level = 0
         self.parents: dict[int, Optional[Union[DocItem, GroupItem]]] = {}
-        for i in range(0, self.max_levels):
+        for i in range(self.max_levels):
             self.parents[i] = None
 
         try:
@@ -125,7 +129,6 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
         return doc
 
     def walk(self, tag: Tag, doc: DoclingDocument) -> None:
-
         # Iterate over elements in the body of the document
         text: str = ""
         for element in tag.children:
@@ -134,7 +137,7 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
                     self.analyze_tag(cast(Tag, element), doc)
                 except Exception as exc_child:
                     _log.error(
-                        f"Error processing child from tag {tag.name}: {repr(exc_child)}"
+                        f"Error processing child from tag {tag.name}: {exc_child!r}"
                     )
                     raise exc_child
             elif isinstance(element, NavigableString) and not isinstance(
@@ -146,7 +149,7 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
                     item for item in element.next_siblings if isinstance(item, Tag)
                 ]
                 if element.next_sibling is None or any(
-                    [item.name in TAGS_FOR_NODE_ITEMS for item in siblings]
+                    item.name in TAGS_FOR_NODE_ITEMS for item in siblings
                 ):
                     text = text.strip()
                     if text and tag.name in ["div"]:
@@ -163,9 +166,9 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
     def analyze_tag(self, tag: Tag, doc: DoclingDocument) -> None:
         if tag.name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
             self.handle_header(tag, doc)
-        elif tag.name in ["p"]:
+        elif tag.name in ["p", "address", "summary"]:
             self.handle_paragraph(tag, doc)
-        elif tag.name in ["pre"]:
+        elif tag.name in ["pre", "code"]:
             self.handle_code(tag, doc)
         elif tag.name in ["ul", "ol"]:
             self.handle_list(tag, doc)
@@ -177,6 +180,8 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
             self.handle_figure(tag, doc)
         elif tag.name == "img":
             self.handle_image(tag, doc)
+        elif tag.name == "details":
+            self.handle_details(tag, doc)
         else:
             self.walk(tag, doc)
 
@@ -201,6 +206,21 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
 
         return ["".join(result) + " "]
 
+    def handle_details(self, element: Tag, doc: DoclingDocument) -> None:
+        """Handle details tag (details) and its content."""
+
+        self.parents[self.level + 1] = doc.add_group(
+            name="details",
+            label=GroupLabel.SECTION,
+            parent=self.parents[self.level],
+            content_layer=self.content_layer,
+        )
+
+        self.level += 1
+        self.walk(element, doc)
+        self.parents[self.level + 1] = None
+        self.level -= 1
+
     def handle_header(self, element: Tag, doc: DoclingDocument) -> None:
         """Handles header tags (h1, h2, etc.)."""
         hlevel = int(element.name.replace("h", ""))
@@ -221,7 +241,6 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
             )
         else:
             if hlevel > self.level:
-
                 # add invisible group
                 for i in range(self.level + 1, hlevel):
                     self.parents[i] = doc.add_group(
@@ -233,7 +252,6 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
                 self.level = hlevel
 
             elif hlevel < self.level:
-
                 # remove the tail
                 for key in self.parents.keys():
                     if key > hlevel:
@@ -260,7 +278,7 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
             )
 
     def handle_paragraph(self, element: Tag, doc: DoclingDocument) -> None:
-        """Handles paragraph tags (p)."""
+        """Handles paragraph tags (p) or equivalent ones."""
         if element.text is None:
             return
         text = element.text.strip()
@@ -359,7 +377,7 @@ class HTMLDocumentBackend(DeclarativeDocumentBackend):
             marker = ""
             enumerated = False
             if parent_label == GroupLabel.ORDERED_LIST:
-                marker = f"{str(index_in_list)}."
+                marker = f"{index_in_list!s}."
                 enumerated = True
             doc.add_list_item(
                 text=text,

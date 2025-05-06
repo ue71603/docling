@@ -13,11 +13,13 @@ from docling_core.types.doc import (
     TableCell,
 )
 from docling_core.types.doc.page import SegmentedPdfPage, TextCell
-from docling_core.types.io import (  # DO ΝΟΤ REMOVE; explicitly exposed from this location
+
+# DO NOT REMOVE; explicitly exposed from this location
+from docling_core.types.io import (
     DocumentStream,
 )
 from PIL.Image import Image
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 if TYPE_CHECKING:
     from docling.backend.pdf_backend import PdfPageBackend
@@ -53,6 +55,7 @@ class OutputFormat(str, Enum):
     MARKDOWN = "md"
     JSON = "json"
     HTML = "html"
+    HTML_SPLIT_PAGE = "html_split_page"
     TEXT = "text"
     DOCTAGS = "doctags"
 
@@ -235,9 +238,9 @@ class Page(BaseModel):
         None  # Internal PDF backend. By default it is cleared during assembling.
     )
     _default_image_scale: float = 1.0  # Default image scale for external usage.
-    _image_cache: Dict[float, Image] = (
-        {}
-    )  # Cache of images in different scales. By default it is cleared during assembling.
+    _image_cache: Dict[
+        float, Image
+    ] = {}  # Cache of images in different scales. By default it is cleared during assembling.
 
     def get_image(
         self, scale: float = 1.0, cropbox: Optional[BoundingBox] = None
@@ -245,7 +248,7 @@ class Page(BaseModel):
         if self._backend is None:
             return self._image_cache.get(scale, None)
 
-        if not scale in self._image_cache:
+        if scale not in self._image_cache:
             if cropbox is None:
                 self._image_cache[scale] = self._backend.get_page_image(scale=scale)
             else:
@@ -267,6 +270,38 @@ class Page(BaseModel):
         return self.get_image(scale=self._default_image_scale)
 
 
+## OpenAI API Request / Response Models ##
+
+
+class OpenAiChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class OpenAiResponseChoice(BaseModel):
+    index: int
+    message: OpenAiChatMessage
+    finish_reason: str
+
+
+class OpenAiResponseUsage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class OpenAiApiResponse(BaseModel):
+    model_config = ConfigDict(
+        protected_namespaces=(),
+    )
+
+    id: str
+    model: Optional[str] = None  # returned by openai
+    choices: List[OpenAiResponseChoice]
+    created: int
+    usage: OpenAiResponseUsage
+
+
 # Create a type alias for score values
 ScoreValue = float
 
@@ -280,7 +315,29 @@ class PageConfidenceScores(BaseModel):
     ocr_score: ScoreValue = np.nan
 
 
+class QualityGrade(str, Enum):
+    POOR = "poor"
+    FAIR = "fair"
+    GOOD = "good"
+    VERY_GOOD = "very_good"
+    UNSPECIFIED = "unspecified"
+
+
 class ConfidenceReport(PageConfidenceScores):
+    @computed_field  # type: ignore
+    @property
+    def grade(self) -> QualityGrade:
+        if self.overall_score < 0.5:
+            return QualityGrade.POOR
+        elif self.overall_score < 0.8:
+            return QualityGrade.FAIR
+        elif self.overall_score < 0.9:
+            return QualityGrade.GOOD
+        elif self.overall_score >= 0.9:
+            return QualityGrade.VERY_GOOD
+
+        return QualityGrade.UNSPECIFIED
+
     pages: Dict[int, PageConfidenceScores] = Field(
         default_factory=lambda: defaultdict(PageConfidenceScores)
     )

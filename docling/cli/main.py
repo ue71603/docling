@@ -6,14 +6,16 @@ import sys
 import tempfile
 import time
 import warnings
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Annotated, Dict, Iterable, List, Optional, Type
+from typing import Annotated, Dict, List, Optional, Type
 
 import rich.table
 import typer
 from docling_core.types.doc import ImageRefMode
 from docling_core.utils.file import resolve_source_to_path
 from pydantic import TypeAdapter
+from rich.console import Console
 
 from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
@@ -40,6 +42,7 @@ from docling.datamodel.pipeline_options import (
     VlmModelType,
     VlmPipelineOptions,
     granite_vision_vlm_conversion_options,
+    granite_vision_vlm_ollama_conversion_options,
     smoldocling_vlm_conversion_options,
     smoldocling_vlm_mlx_conversion_options,
 )
@@ -52,7 +55,6 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module="pydantic|
 warnings.filterwarnings(action="ignore", category=FutureWarning, module="easyocr")
 
 _log = logging.getLogger(__name__)
-from rich.console import Console
 
 console = Console()
 err_console = Console(stderr=True)
@@ -60,12 +62,56 @@ err_console = Console(stderr=True)
 ocr_factory_internal = get_ocr_factory(allow_external_plugins=False)
 ocr_engines_enum_internal = ocr_factory_internal.get_enum()
 
+DOCLING_ASCII_ART = r"""
+                             ████ ██████
+                           ███░░██░░░░░██████
+                      ████████░░░░░░░░████████████
+                   ████████░░░░░░░░░░░░░░░░░░████████
+                 ██████░░░░░░░░░░░░░░░░░░░░░░░░░░██████
+              ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█████
+            ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█████
+          ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████
+         ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████
+        ██████░░░░░░░   ░░░░░░░░░░░░░░░░░░░░░░   ░░░░░░░██████
+       ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████
+      ██████░░░░░░         ░░░░░░░░░░░░░░░          ░░░░░░██████
+      ███▒██░░░░░   ████     ░░░░░░░░░░░░   ████     ░░░░░██▒███
+     ███▒██░░░░░░  ████      ░░░░░░░░░░░░  ████      ░░░░░██▒████
+     ███▒██░░░░░░  ██     ██ ░░░░░░░░░░░░  ██     ██ ░░░░░██▒▒███
+     ███▒███░░░░░        ██  ░░░░████░░░░        ██  ░░░░░██▒▒███
+    ████▒▒██░░░░░░         ░░░███▒▒▒▒███░░░        ░░░░░░░██▒▒████
+    ████▒▒██░░░░░░░░░░░░░░░░░█▒▒▒▒▒▒▒▒▒▒█░░░░░░░░░░░░░░░░███▒▒████
+    ████▒▒▒██░░░░░░░░░░░░█████  ▒▒▒▒▒▒  ██████░░░░░░░░░░░██▒▒▒████
+     ███▒▒▒▒██░░░░░░░░███▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒███░░░░░░░░██▒▒▒▒███
+     ███▒▒▒▒▒███░░░░░░██▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒██░░░░░░███▒▒▒▒▒███
+     ████▒▒▒▒▒████░░░░░░██████████████████████░░░░░░████▒▒▒▒▒████
+      ███▒▒▒▒▒▒▒▒████░░░░░░░░░░░░░░░░░░░░░░░░░░░████▒▒▒▒▒▒▒▒▒███
+      ████▒▒▒▒▒▒▒▒███░░░░░████████████████████████▒▒▒▒▒▒▒▒▒████
+       ████▒▒▒▒▒▒██░░░░░░█                   █░░░░░██▒▒▒▒▒▒████
+        ████▒▒▒▒█░░░░░░░█   D O C L I N G   █░░░░░░░░██▒▒▒████
+         ████▒▒██░░░░░░█                   █░░░░░░░░░░█▒▒████
+          ██████░░░░░░█   D O C L I N G   █░░░░░░░░░░░██████
+            ████░░░░░█                   █░░░░░░░░░░░░████
+             █████░░█   D O C L I N G   █░░░░░░░░░░░█████
+               █████                   █░░░░░░░░████████
+                 ██   D O C L I N G   █░░░░░░░░█████
+                 █                   █░░░████████
+                █████████████████████████████
+"""
+
+
 app = typer.Typer(
     name="Docling",
     no_args_is_help=True,
     add_completion=False,
     pretty_exceptions_enable=False,
 )
+
+
+def logo_callback(value: bool):
+    if value:
+        print(DOCLING_ASCII_ART)
+        raise typer.Exit()
 
 
 def version_callback(value: bool):
@@ -109,12 +155,12 @@ def export_documents(
     output_dir: Path,
     export_json: bool,
     export_html: bool,
+    export_html_split_page: bool,
     export_md: bool,
     export_txt: bool,
     export_doctags: bool,
     image_export_mode: ImageRefMode,
 ):
-
     success_count = 0
     failure_count = 0
 
@@ -136,7 +182,15 @@ def export_documents(
                 fname = output_dir / f"{doc_filename}.html"
                 _log.info(f"writing HTML output to {fname}")
                 conv_res.document.save_as_html(
-                    filename=fname, image_mode=image_export_mode
+                    filename=fname, image_mode=image_export_mode, split_page_view=False
+                )
+
+            # Export HTML format:
+            if export_html_split_page:
+                fname = output_dir / f"{doc_filename}.html"
+                _log.info(f"writing HTML output to {fname}")
+                conv_res.document.save_as_html(
+                    filename=fname, image_mode=image_export_mode, split_page_view=True
                 )
 
             # Export Text format:
@@ -179,7 +233,7 @@ def _split_list(raw: Optional[str]) -> Optional[List[str]]:
 
 
 @app.command(no_args_is_help=True)
-def convert(
+def convert(  # noqa: C901
     input_sources: Annotated[
         List[str],
         typer.Argument(
@@ -235,7 +289,7 @@ def convert(
             ...,
             help=(
                 f"The OCR engine to use. When --allow-external-plugins is *not* set, the available values are: "
-                f"{', '.join((o.value for o in ocr_engines_enum_internal))}. "
+                f"{', '.join(o.value for o in ocr_engines_enum_internal)}. "
                 f"Use the option --show-external-plugins to see the options allowed with external plugins."
             ),
         ),
@@ -356,12 +410,18 @@ def convert(
     device: Annotated[
         AcceleratorDevice, typer.Option(..., help="Accelerator device")
     ] = AcceleratorDevice.AUTO,
+    docling_logo: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--logo", callback=logo_callback, is_eager=True, help="Docling logo"
+        ),
+    ] = None,
 ):
     if verbose == 0:
         logging.basicConfig(level=logging.WARNING)
     elif verbose == 1:
         logging.basicConfig(level=logging.INFO)
-    elif verbose == 2:
+    else:
         logging.basicConfig(level=logging.DEBUG)
 
     settings.debug.visualize_cells = debug_visualize_cells
@@ -370,7 +430,7 @@ def convert(
     settings.debug.visualize_ocr = debug_visualize_ocr
 
     if from_formats is None:
-        from_formats = [e for e in InputFormat]
+        from_formats = list(InputFormat)
 
     parsed_headers: Optional[Dict[str, str]] = None
     if headers is not None:
@@ -421,6 +481,7 @@ def convert(
 
         export_json = OutputFormat.JSON in to_formats
         export_html = OutputFormat.HTML in to_formats
+        export_html_split_page = OutputFormat.HTML_SPLIT_PAGE in to_formats
         export_md = OutputFormat.MARKDOWN in to_formats
         export_txt = OutputFormat.TEXT in to_formats
         export_doctags = OutputFormat.DOCTAGS in to_formats
@@ -460,7 +521,7 @@ def convert(
             if image_export_mode != ImageRefMode.PLACEHOLDER:
                 pipeline_options.generate_page_images = True
                 pipeline_options.generate_picture_images = (
-                    True  # FIXME: to be deprecated in verson 3
+                    True  # FIXME: to be deprecated in version 3
                 )
                 pipeline_options.images_scale = 2
 
@@ -481,10 +542,16 @@ def convert(
                 backend=backend,  # pdf_backend
             )
         elif pipeline == PdfPipeline.VLM:
-            pipeline_options = VlmPipelineOptions()
+            pipeline_options = VlmPipelineOptions(
+                enable_remote_services=enable_remote_services,
+            )
 
             if vlm_model == VlmModelType.GRANITE_VISION:
                 pipeline_options.vlm_options = granite_vision_vlm_conversion_options
+            elif vlm_model == VlmModelType.GRANITE_VISION_OLLAMA:
+                pipeline_options.vlm_options = (
+                    granite_vision_vlm_ollama_conversion_options
+                )
             elif vlm_model == VlmModelType.SMOLDOCLING:
                 pipeline_options.vlm_options = smoldocling_vlm_conversion_options
                 if sys.platform == "darwin":
@@ -528,6 +595,7 @@ def convert(
             output_dir=output,
             export_json=export_json,
             export_html=export_html,
+            export_html_split_page=export_html_split_page,
             export_md=export_md,
             export_txt=export_txt,
             export_doctags=export_doctags,

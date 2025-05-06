@@ -58,6 +58,7 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
         self.level_at_new_list: Optional[int] = None
         self.parents: dict[int, Optional[NodeItem]] = {}
         self.numbered_headers: dict[int, int] = {}
+        self.equation_bookends: str = "<eq>{EQ}</eq>"
         for i in range(-1, self.max_levels):
             self.parents[i] = None
 
@@ -157,7 +158,7 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
     def _get_level(self) -> int:
         """Return the first None index."""
         for k, v in self.parents.items():
-            if k >= 0 and v == None:
+            if k >= 0 and v is None:
                 return k
         return 0
 
@@ -263,6 +264,11 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
 
         label = paragraph.style.style_id
         name = paragraph.style.name
+        base_style_label = None
+        base_style_name = None
+        if base_style := getattr(paragraph.style, "base_style", None):
+            base_style_label = base_style.style_id
+            base_style_name = base_style.name
 
         if label is None:
             return "Normal", None
@@ -276,6 +282,10 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
             return self._get_heading_and_level(label)
         if "heading" in name.lower():
             return self._get_heading_and_level(name)
+        if base_style_label and "heading" in base_style_label.lower():
+            return self._get_heading_and_level(base_style_label)
+        if base_style_name and "heading" in base_style_name.lower():
+            return self._get_heading_and_level(base_style_name)
 
         return label, None
 
@@ -356,9 +366,14 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
                     only_texts.append(subt.text)
                     texts_and_equations.append(subt.text)
             elif "oMath" in subt.tag and "oMathPara" not in subt.tag:
-                latex_equation = str(oMath2Latex(subt))
-                only_equations.append(latex_equation)
-                texts_and_equations.append(latex_equation)
+                latex_equation = str(oMath2Latex(subt)).strip()
+                if len(latex_equation) > 0:
+                    only_equations.append(
+                        self.equation_bookends.format(EQ=latex_equation)
+                    )
+                    texts_and_equations.append(
+                        self.equation_bookends.format(EQ=latex_equation)
+                    )
 
         if len(only_equations) < 1:
             return text, []
@@ -373,21 +388,20 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
 
         # Insert equations into original text
         # This is done to preserve white space structure
-        output_text = ""
+        output_text = text[:]
         init_i = 0
         for i_substr, substr in enumerate(texts_and_equations):
-            if substr not in text:
+            if len(substr) == 0:
+                continue
+
+            if substr in output_text[init_i:]:
+                init_i += output_text[init_i:].find(substr) + len(substr)
+            else:
                 if i_substr > 0:
-                    i_text_before = text[init_i:].find(
-                        texts_and_equations[i_substr - 1]
-                    )
-                    output_text += text[init_i:][
-                        : i_text_before + len(texts_and_equations[i_substr - 1])
-                    ]
-                    init_i += i_text_before + len(texts_and_equations[i_substr - 1])
-                output_text += substr
-                if only_equations.index(substr) == len(only_equations) - 1:
-                    output_text += text[init_i:]
+                    output_text = output_text[:init_i] + substr + output_text[init_i:]
+                    init_i += len(substr)
+                else:
+                    output_text = substr + output_text
 
         return output_text, only_equations
 
@@ -404,7 +418,7 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
             else prev_parent
         )
 
-    def _handle_text_elements(
+    def _handle_text_elements(  # noqa: C901
         self,
         element: BaseOxmlElement,
         docx_obj: DocxDocument,
@@ -422,7 +436,7 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
 
         # Common styles for bullet and numbered lists.
         # "List Bullet", "List Number", "List Paragraph"
-        # Identify wether list is a numbered list or not
+        # Identify whether list is a numbered list or not
         # is_numbered = "List Bullet" not in paragraph.style.name
         is_numbered = False
         p_style_id, p_level = self._get_label_and_level(paragraph)
@@ -479,13 +493,13 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
             self._add_header(doc, p_level, text, is_numbered_style)
 
         elif len(equations) > 0:
-            if (raw_text is None or len(raw_text) == 0) and len(text) > 0:
+            if (raw_text is None or len(raw_text.strip()) == 0) and len(text) > 0:
                 # Standalone equation
                 level = self._get_level()
                 doc.add_text(
                     label=DocItemLabel.FORMULA,
                     parent=self.parents[level - 1],
-                    text=text,
+                    text=text.replace("<eq>", "").replace("</eq>", ""),
                 )
             else:
                 # Inline equation
@@ -498,8 +512,11 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
                     if len(text_tmp) == 0:
                         break
 
-                    pre_eq_text = text_tmp.split(eq.strip(), maxsplit=1)[0]
-                    text_tmp = text_tmp.split(eq.strip(), maxsplit=1)[1]
+                    split_text_tmp = text_tmp.split(eq.strip(), maxsplit=1)
+
+                    pre_eq_text = split_text_tmp[0]
+                    text_tmp = "" if len(split_text_tmp) == 1 else split_text_tmp[1]
+
                     if len(pre_eq_text) > 0:
                         doc.add_text(
                             label=DocItemLabel.PARAGRAPH,
@@ -509,8 +526,9 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
                     doc.add_text(
                         label=DocItemLabel.FORMULA,
                         parent=inline_equation,
-                        text=eq,
+                        text=eq.replace("<eq>", "").replace("</eq>", ""),
                     )
+
                 if len(text_tmp) > 0:
                     doc.add_text(
                         label=DocItemLabel.PARAGRAPH,
@@ -794,7 +812,7 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
                     f" col {col_idx} grid_span {cell.grid_span} grid_cols_before {row.grid_cols_before}"
                 )
                 if cell is None or cell._tc in cell_set:
-                    _log.debug(f"  skipped since repeated content")
+                    _log.debug("  skipped since repeated content")
                     col_idx += cell.grid_span
                     continue
                 else:
@@ -832,7 +850,8 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
     def _handle_pictures(
         self, docx_obj: DocxDocument, drawing_blip: Any, doc: DoclingDocument
     ) -> None:
-        def get_docx_image(drawing_blip):
+        def get_docx_image(drawing_blip: Any) -> Optional[bytes]:
+            image_data: Optional[bytes] = None
             rId = drawing_blip[0].get(
                 "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
             )
@@ -844,19 +863,26 @@ class MsWordDocumentBackend(DeclarativeDocumentBackend):
 
         level = self._get_level()
         # Open the BytesIO object with PIL to create an Image
-        try:
-            image_data = get_docx_image(drawing_blip)
-            image_bytes = BytesIO(image_data)
-            pil_image = Image.open(image_bytes)
-            doc.add_picture(
-                parent=self.parents[level - 1],
-                image=ImageRef.from_pil(image=pil_image, dpi=72),
-                caption=None,
-            )
-        except (UnidentifiedImageError, OSError) as e:
-            _log.warning("Warning: image cannot be loaded by Pillow")
+        image_data: Optional[bytes] = get_docx_image(drawing_blip)
+        if image_data is None:
+            _log.warning("Warning: image cannot be found")
             doc.add_picture(
                 parent=self.parents[level - 1],
                 caption=None,
             )
+        else:
+            try:
+                image_bytes = BytesIO(image_data)
+                pil_image = Image.open(image_bytes)
+                doc.add_picture(
+                    parent=self.parents[level - 1],
+                    image=ImageRef.from_pil(image=pil_image, dpi=72),
+                    caption=None,
+                )
+            except (UnidentifiedImageError, OSError):
+                _log.warning("Warning: image cannot be loaded by Pillow")
+                doc.add_picture(
+                    parent=self.parents[level - 1],
+                    caption=None,
+                )
         return

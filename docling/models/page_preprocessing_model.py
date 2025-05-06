@@ -1,6 +1,7 @@
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 import numpy as np
 from PIL import ImageDraw
@@ -26,6 +27,9 @@ class PagePreprocessingModel(BasePageModel):
         self.GLYPH_RE = re.compile(r"GLYPH<[0-9A-Fa-f]+>")
         self.SLASH_G_RE = re.compile(r"(?:/G\d+){2,}")
         self.FRAG_RE = re.compile(r"\b[A-Za-z](?:/[a-z]{1,3}\.[a-z]{1,3}){2,}\b")
+        self.SLASH_NUMBER_GARBAGE_RE = re.compile(
+            r"(?:/\w+\s+){5,}"
+        )  # Five or more "/token " sequences
 
     def __call__(
         self, conv_res: ConversionResult, page_batch: Iterable[Page]
@@ -74,7 +78,7 @@ class PagePreprocessingModel(BasePageModel):
 
         conv_res.confidence.pages[page.page_no].parse_score = float(
             np.nanquantile(
-                text_scores, q=0.05
+                text_scores, q=0.10
             )  # To emphasise problems in the parse_score, we take the 10% percentile score of all text cells.
         )
 
@@ -111,9 +115,12 @@ class PagePreprocessingModel(BasePageModel):
         # Hard errors: if any of these patterns are found, return 0.0 immediately.
         blacklist_chars = ["�"]
         if (
-            self.GLYPH_RE.search(text)
+            any(text.find(c) >= 0 for c in blacklist_chars)
+            or self.GLYPH_RE.search(text)
             or self.SLASH_G_RE.search(text)
-            or any([text.find(c) >= 0 for c in blacklist_chars])
+            or self.SLASH_NUMBER_GARBAGE_RE.match(
+                text
+            )  # Check if text is mostly slash-number pattern
         ):
             return 0.0
 

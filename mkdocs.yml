@@ -67,6 +67,7 @@ nav:
     - Architecture: concepts/architecture.md
     - Docling Document: concepts/docling_document.md
     - Chunking: concepts/chunking.md
+    - Plugins: concepts/plugins.md
   - Examples:
     - Examples: examples/index.md
     - 🔀 Conversion:
@@ -74,6 +75,8 @@ nav:
       - "Custom conversion": examples/custom_convert.py
       - "Batch conversion": examples/batch_convert.py
       - "Multi-format conversion": examples/run_with_formats.py
+      - "VLM pipeline with SmolDocling": examples/minimal_vlm_pipeline.py
+      - "VLM pipeline with remote model": examples/vlm_pipeline_api_model.py
       - "Figure export": examples/export_figures.py
       - "Table export": examples/export_tables.py
       - "Multimodal export": examples/export_multimodal.py
@@ -98,6 +101,7 @@ nav:
       - "Figure enrichment": examples/develop_picture_enrichment.py
       - "Formula enrichment": examples/develop_formula_understanding.py
     - 🗂️ More examples:
+      - examples/rag_milvus.ipynb
       - examples/rag_weaviate.ipynb
       - RAG with Granite [↗]: https://github.com/ibm-granite-community/granite-snack-cookbook/blob/main/recipes/RAG/Granite_Docling_RAG.ipynb
       - examples/rag_azuresearch.ipynb
