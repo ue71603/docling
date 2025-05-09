@@ -12,7 +12,7 @@ GENERATE = GEN_TEST_DATA
 
 def get_pptx_paths():
     # Define the directory you want to search
-    directory = Path("../../tests/data/pptx/")
+    directory = Path("./tests/data/pptx/")
 
     # List all PPTX files in the directory and its subdirectories
     pptx_files = sorted(directory.rglob("*.pptx"))

@@ -43,7 +43,7 @@ def test_heading_levels():
 
 def get_docx_paths():
     # Define the directory you want to search
-    directory = Path("../../tests/data/docx/")
+    directory = Path("./tests/data/docx/")
 
     # List all PDF files in the directory and its subdirectories
     pdf_files = sorted(directory.rglob("*.docx"))

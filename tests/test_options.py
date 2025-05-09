@@ -20,7 +20,7 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 
 @pytest.fixture
 def test_doc_path():
-    return Path("../../tests/data/pdf/2206.01062.pdf")
+    return Path("./tests/data/pdf/2206.01062.pdf")
 
 
 def get_converters_with_table_options():
@@ -159,7 +159,7 @@ def test_parser_backends(test_doc_path):
             }
         )
 
-        test_doc_path = Path("../../tests/data/pdf/code_and_formula.pdf")
+        test_doc_path = Path("./tests/data/pdf/code_and_formula.pdf")
         doc_result: ConversionResult = converter.convert(test_doc_path)
 
         assert doc_result.status == ConversionStatus.SUCCESS
