@@ -18,7 +18,7 @@ GENERATE = GEN_TEST_DATA
 
 def get_xlsx_paths():
     # Define the directory you want to search
-    directory = Path("./tests/data/xlsx/")
+    directory = Path("../../tests/data/xlsx/")
 
     # List all PDF files in the directory and its subdirectories
     pdf_files = sorted(directory.rglob("*.xlsx"))

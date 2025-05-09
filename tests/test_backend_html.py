@@ -106,7 +106,7 @@ def test_ordered_lists():
 
 def get_html_paths():
     # Define the directory you want to search
-    directory = Path("./tests/data/html/")
+    directory = Path("../../tests/data/html/")
 
     # List all HTML files in the directory and its subdirectories
     html_files = sorted(directory.rglob("*.html"))
